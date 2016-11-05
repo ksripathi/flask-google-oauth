@@ -1,0 +1,164 @@
+* =setup.py= file
+#+BEGIN_SRC 
+from setuptools import setup
+
+setup(
+    name='Flask-OAuth',
+    version='0.13',
+    url='http://github.com/mitsuhiko/flask-oauth',
+    license='BSD',
+    author='Armin Ronacher',
+    author_email='armin.ronacher@active-4.com',
+    description='Adds OAuth support to Flask',
+    long_description=__doc__,
+    py_modules=['flask_oauth'],
+    zip_safe=False,
+    platforms='any',
+    install_requires=[
+        'Flask',
+        'oauth2'
+    ],
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Environment :: Web Environment',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: BSD License',
+        'Operating System :: OS Independent',
+        'Programming Language :: Python',
+        'Topic :: Internet :: WWW/HTTP :: Dynamic Content',
+        'Topic :: Software Development :: Libraries :: Python Modules'
+    ]
+)
+
+#+END_SRC
+* =app.py= imports
+#+BEGIN_SRC 
+from flask import Flask, redirect, url_for, session, request, jsonify, render_template
+from flask_oauthlib.client import OAuth
+import json
+import requests
+
+#+END_SRC
+* =flask app=
+#+BEGIN_SRC 
+app = Flask(__name__)
+app.config['GOOGLE_ID'] = "420719460133-g13g6abnnised3v4nq4d430jo8mpb9m8.apps.googleusercontent.com"
+app.config['GOOGLE_SECRET'] = "DQxOnwOectvfFFe05jqKTIQT"
+app.debug = True
+app.secret_key = 'development'
+oauth = OAuth(app)
+
+google = oauth.remote_app(
+    'google',
+    consumer_key=app.config.get('GOOGLE_ID'),
+    consumer_secret=app.config.get('GOOGLE_SECRET'),
+    request_token_params={
+        'scope': 'email'
+    },
+    #base_url = 'https://www.google.com/accounts/',
+    base_url='https://www.googleapis.com/oauth2/v1/',
+    request_token_url=None,
+    access_token_method='POST',
+    #REDIRECT_URI = '/authorized'  # one of the Redirect URIs from Google APIs console
+
+    access_token_url='https://accounts.google.com/o/oauth2/token',
+    authorize_url='https://accounts.google.com/o/oauth2/auth',
+)
+
+
+
+#+END_SRC
+* =apis=
+#+BEGIN_SRC 
+@app.route('/')
+def index():
+    return render_template("index.html")
+
+@app.route("/admin", methods=['GET','POST'])
+def admin():
+    if request.method == 'GET':
+        APP_URL = "http://localhost:5001"
+	if ('email' in session) and (session['role'] == 'admin'):
+	    rg = requests.get(APP_URL + "/reference_documents?user_id="+str(session['id']))
+	    rg_json = json.loads(rg.text)
+	    documents =  rg_json
+	    return render_template("admin.html", documents=documents)
+	else:
+	    return redirect("/")
+
+@app.route("/oc")
+def outreach_coordinator():
+
+    if ('email' in session) and (session['role'] == 'OC'):
+	return render_template("oc.html")
+    else:
+	return redirect("/")
+
+@app.route("/nc")
+def nodal_coordinator():
+    if ('email' in session) and (session['role'] == 'NC'):
+	return render_template("nc.html")
+    else:
+	return redirect("/")
+
+
+@app.route('/login')
+def login():
+    return google.authorize(callback=url_for('authorized', _external=True))
+
+@app.route('/logout')
+def logout():
+    if 'google_token' in session:
+        session.pop('google_token', None)
+        session.pop('role', None)
+        session.pop('email', None)
+    return redirect("https://www.google.com/accounts/Logout?continue=https://appengine.google.com/_ah/logout?continue=http://localhost:5000")
+
+@app.route('/authorized')
+def authorized():
+    resp = google.authorized_response()
+    
+    if resp is None:
+        return redirect("/")
+    session['google_token'] = (resp['access_token'], '')
+    me = google.get('userinfo')
+    #return jsonify({"data": me.data})
+    #return str(me.data['verified_email'])
+    email = str(me.data['email'])
+    APP_URL = "http://localhost:5001"
+    url_for_getting_the_user = "%s/users?email=%s" % \
+				       (APP_URL, email)
+    backend_resp = requests.get(url_for_getting_the_user)
+    
+    if (len(backend_resp.text.encode('ascii')) != 2):
+        session['email'] = email
+        role = backend_resp.json()[0]['role']['name'].encode('ascii')
+        name = backend_resp.json()[0]['name'].encode('ascii')
+        session['role'] = role
+        session['name'] = name
+        session['id'] = backend_resp.json()[0]['id']
+        if backend_resp.json()[0]['email'].encode('ascii') == \
+           str(session['email']):
+            if role == "OC":
+                return redirect("/oc")
+            elif role == "NC":
+                return redirect("/nc")
+            elif role == "admin":
+                return redirect("/admin")
+            
+        else:
+            return 'Invalid'
+    else:
+        print "dfdf"
+
+    #return redirect("/admin")
+
+
+@google.tokengetter
+def get_google_oauth_token():
+    return session.get('google_token')
+
+if __name__ == '__main__':
+    app.run()
+
+#+END_SRC
