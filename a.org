@@ -1,60 +1,10 @@
-from flask import Flask, redirect, url_for, session, request, jsonify, render_template
-from flask_oauthlib.client import OAuth
-import json
-import requests
-app = Flask(__name__)
-app.debug = True
-app.secret_key = 'development'
-oauth = OAuth()
-
-google = oauth.remote_app(
-    'google',
-    consumer_key="mykey",
-    consumer_secret="mykey",
-    request_token_params={
-        'scope': 'email'
-    },
-    #base_url = 'https://www.google.com/accounts/',
-    base_url='https://www.googleapis.com/oauth2/v1/',
-    request_token_url=None,
-    access_token_method='POST',
-    #REDIRECT_URI = '/authorized'  # one of the Redirect URIs from Google APIs console
-
-    access_token_url='https://accounts.google.com/o/oauth2/token',
-    authorize_url='https://accounts.google.com/o/oauth2/auth',
-)
+* =app.wsgi= file
+#+BEGIN_SRC 
+import sys, os
+sys.path.insert(0, "/var/www/src")
+from app import app
+application = app
 
 
-
-@app.route('/')
-def index():
-    return render_template("index.html")
-
-@app.route('/login')
-def login():
-    return google.authorize(callback=url_for('authorized', _external=True))
-
-@app.route('/logout')
-def logout():
-    if 'google_token' in session:
-        session.pop('google_token', None)
-        session.pop('role', None)
-        session.pop('email', None)
-    return redirect("/")
-
-@app.route('/authorized')
-def authorized():
-    resp = google.authorized_response()
     
-    if resp is None:
-        return redirect("/")
-    session['google_token'] = (resp['access_token'], '')
-    me = google.get('userinfo')
-    return jsonify({"data": me.data})
-    
-@google.tokengetter
-def get_google_oauth_token():
-    return session.get('google_token')
-
-if __name__ == '__main__':
-    app.run()
+#+END_SRC
