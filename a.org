@@ -52,7 +52,7 @@ application = app
         Allow from 127.0.0.0/255.0.0.0 ::1/128
     </Directory>
 
-WSGIScriptAlias / /var/www/outreach.wsgi
+WSGIScriptAlias / /var/www/app.wsgi
 </VirtualHost>
     
 #+END_SRC
